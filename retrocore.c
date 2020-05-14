@@ -1,4 +1,8 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include "SDL.h"
 #include "libretro.h"
 #include "retrocore.h"
@@ -16,6 +20,9 @@ static retro_usec_t runloop_frame_time_last = 0;
 static struct retro_audio_callback audio_callback;
 static double target_frame_time = 0.165;
 static unsigned frame_count = 0;
+
+static char *current_game_path = NULL;
+static uint8_t last_sram[2048] = {0};
 
 struct retro_game_geometry g_geometry = {0};
 struct video_frame g_current_frame = {0};
@@ -65,8 +72,8 @@ static struct {
 //	bool retro_load_game_special(unsigned game_type, const struct retro_game_info *info, size_t num_info);
 	void (*retro_unload_game)(void);
 //	unsigned retro_get_region(void);
-//	void *retro_get_memory_data(unsigned id);
-//	size_t retro_get_memory_size(unsigned id);
+	void *(*retro_get_memory_data)(unsigned id);
+	size_t (*retro_get_memory_size)(unsigned id);
 } g_retro;
 
 
@@ -378,6 +385,8 @@ static void core_load(const char *sofile) {
 	load_retro_sym(retro_run);
 	load_retro_sym(retro_load_game);
 	load_retro_sym(retro_unload_game);
+	load_retro_sym(retro_get_memory_size);
+	load_retro_sym(retro_get_memory_data);
 
 	load_sym(set_environment, retro_set_environment);
 	load_sym(set_video_refresh, retro_set_video_refresh);
@@ -467,6 +476,67 @@ static void core_unload() {
         SDL_UnloadObject(g_retro.handle);
 }
 
+// returns a newly allocated string; it's the caller's responsibility to free it
+// example: string_replace_extension("/path/to/gamename.pce", ".sav") -> "/path/to/gamename.sav"
+static char * string_replace_extension(const char *original, const char *extension)
+{
+    char *dot_pos = strrchr(original, '.'), *result;
+    size_t orig_len, ext_len = strlen(extension);
+    if (!dot_pos || strchr(dot_pos, '/') || strchr(dot_pos, '\\'))
+    {
+        // file has no extension
+        orig_len = strlen(original);
+    }
+    else
+    {
+        // file has an extension that starts with dot_pos
+        orig_len = dot_pos - original;
+    }
+    result = malloc(orig_len + ext_len + 1);
+    memcpy(result, original, orig_len);
+    memcpy(result + orig_len, extension, ext_len);
+    result[orig_len + ext_len] = 0;
+    return result;
+}
+
+static bool load_sram(const char *path)
+{
+    FILE *fp;
+    void *sram = g_retro.retro_get_memory_data(RETRO_MEMORY_SAVE_RAM);
+    size_t size = g_retro.retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
+
+    if (!sram) return false;
+    g_assert(size == sizeof(last_sram));
+    fp = fopen(path, "rb");
+    if (!fp) return false;
+    if (fread(last_sram, 1, size, fp) != size)
+    {
+        fclose(fp);
+        return false;
+    }
+    fclose(fp);
+    memcpy(sram, last_sram, size);
+    return true;
+}
+
+static bool save_sram(const char *path)
+{
+    FILE *fp;
+    void *sram = g_retro.retro_get_memory_data(RETRO_MEMORY_SAVE_RAM);
+    size_t size = g_retro.retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
+
+    if (!sram) return false;
+    fp = fopen(path, "wb");
+    if (!fp) return false;
+    if (fwrite(sram, 1, size, fp) != size)
+    {
+        fclose(fp);
+        return false;
+    }
+    fclose(fp);
+    return true;
+}
+
 static void noop() {}
 
 void retrocore_init(const char *core_path, const char *game_path)
@@ -485,6 +555,17 @@ void retrocore_init(const char *core_path, const char *game_path)
 
     // Load the game.
     core_load_game(game_path);
+    current_game_path = strdup(game_path);
+
+    // Load save data (SRAM) from disk.
+    char *save_path = string_replace_extension(current_game_path, ".sav");
+    printf("save path=%s\n", save_path);
+    if (load_sram(save_path))
+        printf("Loaded SRAM from %s\n", save_path);
+    else
+        printf("No saved data found\n");
+    free(save_path);
+    memcpy(last_sram, g_retro.retro_get_memory_data(RETRO_MEMORY_SAVE_RAM), sizeof(last_sram));
 
     // Configure the player input devices.
     g_retro.retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
@@ -522,6 +603,21 @@ gpointer retrocore_run_game(gpointer data)
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		g_retro.retro_run();
+
+        // SRAM updated?
+        void *sram = g_retro.retro_get_memory_data(RETRO_MEMORY_SAVE_RAM);
+        if (memcmp(last_sram, sram, sizeof(last_sram)) != 0)
+        {
+            printf("SRAM updated!\n");
+            char *save_path = string_replace_extension(current_game_path, ".sav");
+            if (save_sram(save_path))
+                printf("Saved SRAM to %s\n", save_path);
+            else
+                printf("Failed to save SRAM to %s\n", save_path);
+            free(save_path);
+            memcpy(last_sram, sram, sizeof(last_sram));
+        }
+
 		//printf("frame time: %.1f ms\n", (SDL_GetPerformanceCounter() - last_frame_time) / (double)SDL_GetPerformanceFrequency() * 1000);
 		last_frame_time = SDL_GetPerformanceCounter();
 		++frame_count;
@@ -533,6 +629,10 @@ void retrocore_quit()
     core_unload();
 	audio_deinit();
 	video_deinit();
+
+    free(current_game_path);
+    current_game_path = NULL;
+    memset(last_sram, 0, sizeof(last_sram));
 
     SDL_Quit();
 }
