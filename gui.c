@@ -56,6 +56,8 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
     {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, g_geometry.max_width, g_geometry.max_height, 0,
                      GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
+        glUniform2f(glGetUniformLocation(shader_program, "tex_dims"), g_geometry.max_width, g_geometry.max_height);
+        texture_inited = true;
     }
 
     if (g_current_frame.data != NULL)
@@ -66,6 +68,9 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
             GL_RGB, GL_UNSIGNED_SHORT_5_6_5, g_current_frame.data);
         GLint coord_scale_loc = glGetUniformLocation(shader_program, "coord_scale");
         glUniform2f(coord_scale_loc, g_current_frame.right, g_current_frame.bottom);
+        float scaleFactor = MIN((float)allocatedWidth / g_current_frame.width,
+                                (float)allocatedHeight / g_current_frame.height);
+        glUniform1f(glGetUniformLocation(shader_program, "scale_factor"), scaleFactor);
     }
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -123,8 +128,8 @@ static void on_realize_gl_area(GtkGLArea *area)
     GLuint texture = 0;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     const char* vertex_shader =
     "#version 150\n"
@@ -143,9 +148,15 @@ static void on_realize_gl_area(GtkGLArea *area)
     "in vec2 tex_coord;\n"
     "out vec4 frag_color;\n"
     "uniform sampler2D texture;\n"
+    "uniform vec2 tex_dims;\n"
+	"uniform float scale_factor;\n"
     "void main() {\n"
-    "    frag_color = texture2D(texture, tex_coord);\n"
-    "}";
+    "   vec2 texel = tex_coord * tex_dims;\n"
+    "   float region_range = 0.5 - 0.5 / scale_factor;\n"
+    "   vec2 distFromCenter = fract(texel) - 0.5;\n"
+    "   vec2 f = (distFromCenter - clamp(distFromCenter, -region_range, region_range)) * scale_factor + 0.5;\n"
+    "   frag_color = texture2D(texture, (floor(texel) + f) / tex_dims);\n"
+    "}\n";
 
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vs, 1, &vertex_shader, NULL);
