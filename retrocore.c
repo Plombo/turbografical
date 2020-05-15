@@ -597,6 +597,8 @@ void retrocore_init(const char *core_path, const char *game_path)
 
 gpointer retrocore_run_game(gpointer data)
 {
+    start_time = 0;
+
     while (running) {
         // Update the game loop timer.
         if (runloop_frame_time.callback) {
