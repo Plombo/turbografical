@@ -16,6 +16,7 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <gtk/gtk.h>
 #include "retrocore.h"
@@ -27,6 +28,9 @@
 static GLuint shader_program = 0;
 static bool texture_inited = 0;
 static GThread *emu_thread = NULL;
+GMutex g_frame_lock = {0};
+GCond g_ready_cond = {0};
+int64_t last_frame_count = -1;
 
 static gboolean render(GtkGLArea *area, GdkGLContext *context)
 {
@@ -60,35 +64,57 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
         texture_inited = true;
     }
 
-    if (g_current_frame.data != NULL)
+    g_mutex_lock(&g_frame_lock);
+    struct video_frame *frame;
+    double now = retrocore_time();
+    if (now >= g_frames[g_next_frame].presentation_time &&
+        (g_frames[g_next_frame].frame_count == last_frame_count + 1 ||
+         now - g_frames[g_next_frame].presentation_time >= target_frame_time))
+    {
+        frame = &g_frames[g_next_frame];
+        //printf("advancing to frame %li (%i)\n", frame->frame_count, g_next_frame);
+        g_cond_signal(&g_ready_cond);
+        //printf("signalled at %.3f s (%.3f s after frame %li pres time of %.3f s)\n", retrocore_time(), retrocore_time() - frame->presentation_time, frame->frame_count, frame->presentation_time);
+    }
+    else
+    {
+        frame = &g_frames[!g_next_frame];
+        //printf("staying on frame %li (%i)\n", frame->frame_count, !g_next_frame);
+        g_assert(retrocore_time() >= frame->presentation_time);
+    }
+
+    if (frame->data != NULL)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 2); // it would be better to get the "2" from the provided pixel format
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, g_current_frame.pitch / 2);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, g_current_frame.width, g_current_frame.height,
-            GL_RGB, GL_UNSIGNED_SHORT_5_6_5, g_current_frame.data);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, frame->pitch / 2);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame->width, frame->height,
+            GL_RGB, GL_UNSIGNED_SHORT_5_6_5, frame->data);
         GLint coord_scale_loc = glGetUniformLocation(shader_program, "coord_scale");
-        glUniform2f(coord_scale_loc, g_current_frame.right, g_current_frame.bottom);
-        float scaleFactor = MIN((float)allocatedWidth / g_current_frame.width,
-                                (float)allocatedHeight / g_current_frame.height);
+        glUniform2f(coord_scale_loc, frame->right, frame->bottom);
+        float scaleFactor = MIN((float)allocatedWidth / frame->width,
+                                (float)allocatedHeight / frame->height);
         glUniform1f(glGetUniformLocation(shader_program, "scale_factor"), scaleFactor);
     }
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
 #if 0 // code to test the frame pacing
-    static unsigned last_frame_count = (unsigned)-1;
+    //static unsigned last_frame_count = (unsigned)-1;
     static unsigned frame_duration = 0;
-    if (g_current_frame.frame_count == last_frame_count)
+    if (frame->frame_count == last_frame_count)
         ++frame_duration;
     else
     {
-        printf("Frame %u duration: %u\n", last_frame_count, frame_duration);
-        while (++last_frame_count < g_current_frame.frame_count)
-            printf("Frame %u duration: 0\n", last_frame_count);
-        last_frame_count = g_current_frame.frame_count;
+        if (frame_duration != 1)
+            printf("Frame %li duration: %u\n", last_frame_count, frame_duration);
+        while (++last_frame_count < frame->frame_count)
+            printf("Frame %li duration: 0\n", last_frame_count);
+        last_frame_count = frame->frame_count;
         frame_duration = 1;
     }
 #endif
+
+    g_mutex_unlock(&g_frame_lock);
 
     return TRUE;
 }
@@ -300,6 +326,9 @@ int main(int argc, char **argv)
     gtk_widget_add_events(GTK_WIDGET(window), GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK);
     g_signal_connect(G_OBJECT(window), "key_press_event", G_CALLBACK(handle_key_press), NULL);
     g_signal_connect(G_OBJECT(window), "key_release_event", G_CALLBACK(handle_key_release), NULL);
+
+    g_mutex_init(&g_frame_lock);
+    g_cond_init(&g_ready_cond);
 
     if (argc > 1)
     {

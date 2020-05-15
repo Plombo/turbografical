@@ -12,11 +12,21 @@ struct video_frame {
     float bottom;
     float right;
     void *data;
-    unsigned frame_count;
+    int64_t frame_count;
+    double presentation_time;
 };
 
-extern struct video_frame g_current_frame;
+// Used to signal when the frontend has displayed a frame and is ready for a new one.
+extern GMutex g_frame_lock;
+extern GCond g_ready_cond;
+
+extern struct video_frame g_frames[];
+extern int g_next_frame;
+extern double target_frame_time;
 extern struct retro_game_geometry g_geometry;
+
+// returns time from core startup in seconds
+double retrocore_time(void);
 
 void handle_key_event(unsigned keyval, bool pressed);
 

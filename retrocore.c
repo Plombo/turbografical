@@ -18,14 +18,17 @@ static SDL_AudioDeviceID g_pcm = 0;
 static struct retro_frame_time_callback runloop_frame_time;
 static retro_usec_t runloop_frame_time_last = 0;
 static struct retro_audio_callback audio_callback;
-static double target_frame_time = 0.165;
-static unsigned frame_count = 0;
+static int64_t frame_count = 0;
+double target_frame_time = 0.165;
 
 static char *current_game_path = NULL;
 static uint8_t last_sram[2048] = {0};
 
 struct retro_game_geometry g_geometry = {0};
-struct video_frame g_current_frame = {0};
+struct video_frame g_frames[2] = {{0}, {0}};
+int g_next_frame = 0;
+
+static Uint64 start_time = 0;
 
 static float g_scale = 3;
 bool running = true;
@@ -122,6 +125,13 @@ static void die(const char *fmt, ...) {
 	exit(EXIT_FAILURE);
 }
 
+double retrocore_time(void)
+{
+    if (start_time == 0)
+        start_time = SDL_GetPerformanceCounter();
+    return (SDL_GetPerformanceCounter() - start_time) / (double)SDL_GetPerformanceFrequency();
+}
+
 void handle_key_event(unsigned keyval, bool pressed)
 {
     int i;
@@ -197,23 +207,37 @@ static bool video_set_pixel_format(unsigned format) {
 
 
 static void video_refresh(const void *data, unsigned width, unsigned height, unsigned pitch) {
-    if (g_video.clip_w != width || g_video.clip_h != height || g_current_frame.data == NULL)
+    g_mutex_lock(&g_frame_lock);
+    if (retrocore_time() < g_frames[g_next_frame].presentation_time)
+    {
+        g_cond_wait(&g_ready_cond, &g_frame_lock);
+        //printf("Frame %li woke up %.1f ms early at %.3f s\n", frame_count, (frame_count * target_frame_time - retrocore_time()) * 1000, retrocore_time());
+    }
+
+    g_next_frame = !g_next_frame;
+    struct video_frame *frame = &g_frames[g_next_frame];
+
+    if (g_video.clip_w != width || g_video.clip_h != height || frame->data == NULL)
     {
 		g_video.clip_h = height;
 		g_video.clip_w = width;
 
-		g_current_frame.data = realloc(g_current_frame.data, pitch * height * g_video.bpp);
+		frame->data = realloc(frame->data, pitch * height * g_video.bpp);
 	}
 
-    g_current_frame.frame_count = frame_count;
-    g_current_frame.width = width;
-    g_current_frame.height = height;
-    g_current_frame.pitch = pitch;
-    g_current_frame.bottom = (float)g_video.clip_h / g_video.tex_h;
-    g_current_frame.right  = (float)g_video.clip_w / g_video.tex_w;
+    frame->frame_count = frame_count;
+    frame->presentation_time = frame_count * target_frame_time;
+    frame->width = width;
+    frame->height = height;
+    frame->pitch = pitch;
+    frame->bottom = (float)g_video.clip_h / g_video.tex_h;
+    frame->right  = (float)g_video.clip_w / g_video.tex_w;
     if (data && data != RETRO_HW_FRAME_BUFFER_VALID) {
-        memcpy(g_current_frame.data, data, pitch * height * g_video.bpp);
+        memcpy(frame->data, data, pitch * height * g_video.bpp);
     }
+    //if (retrocore_time() >= frame->presentation_time)
+    //    printf("Frame %li finished %.1f ms late at %.3f s\n", frame_count, (retrocore_time() - frame->presentation_time) * 1000, retrocore_time());
+    g_mutex_unlock(&g_frame_lock);
 }
 
 static void video_deinit() {
@@ -573,9 +597,6 @@ void retrocore_init(const char *core_path, const char *game_path)
 
 gpointer retrocore_run_game(gpointer data)
 {
-    Uint64 start_time = 0;
-    Uint64 last_frame_time = 0;
-
     while (running) {
         // Update the game loop timer.
         if (runloop_frame_time.callback) {
@@ -591,14 +612,6 @@ gpointer retrocore_run_game(gpointer data)
         // Ask the core to emit the audio.
         if (audio_callback.callback) {
             audio_callback.callback();
-        }
-
-        if (start_time == 0) start_time = SDL_GetPerformanceCounter();
-        double time_since_start = (SDL_GetPerformanceCounter() - start_time) / (double)SDL_GetPerformanceFrequency();
-        while (time_since_start < frame_count * target_frame_time)
-        {
-            g_usleep((frame_count * target_frame_time - time_since_start) * 1000000);
-            time_since_start = (SDL_GetPerformanceCounter() - start_time) / (double)SDL_GetPerformanceFrequency();
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -618,10 +631,10 @@ gpointer retrocore_run_game(gpointer data)
             memcpy(last_sram, sram, sizeof(last_sram));
         }
 
-		//printf("frame time: %.1f ms\n", (SDL_GetPerformanceCounter() - last_frame_time) / (double)SDL_GetPerformanceFrequency() * 1000);
-		last_frame_time = SDL_GetPerformanceCounter();
 		++frame_count;
 	}
+
+    return NULL;
 }
 
 void retrocore_quit()
