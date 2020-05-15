@@ -222,7 +222,7 @@ static void video_refresh(const void *data, unsigned width, unsigned height, uns
 		g_video.clip_h = height;
 		g_video.clip_w = width;
 
-		frame->data = realloc(frame->data, pitch * height * g_video.bpp);
+		frame->data = realloc(frame->data, pitch * height);
 	}
 
     frame->frame_count = frame_count;
@@ -233,7 +233,7 @@ static void video_refresh(const void *data, unsigned width, unsigned height, uns
     frame->bottom = (float)g_video.clip_h / g_video.tex_h;
     frame->right  = (float)g_video.clip_w / g_video.tex_w;
     if (data && data != RETRO_HW_FRAME_BUFFER_VALID) {
-        memcpy(frame->data, data, pitch * height * g_video.bpp);
+        memcpy(frame->data, data, pitch * height);
     }
     //if (retrocore_time() >= frame->presentation_time)
     //    printf("Frame %li finished %.1f ms late at %.3f s\n", frame_count, (retrocore_time() - frame->presentation_time) * 1000, retrocore_time());
