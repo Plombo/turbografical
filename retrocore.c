@@ -134,6 +134,12 @@ double retrocore_time(void)
 
 void handle_key_event(unsigned keyval, bool pressed)
 {
+    // account for caps lock; 'A' and 'a' are the same thing for our purposes
+    if (keyval >= 'A' && keyval <= 'Z')
+    {
+        keyval = tolower(keyval);
+    }
+
     int i;
     for (i = 0; g_binds[i].k || g_binds[i].rk; ++i)
     {
