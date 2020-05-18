@@ -31,6 +31,7 @@ static GThread *emu_thread = NULL;
 GMutex g_frame_lock = {0};
 GCond g_ready_cond = {0};
 int64_t last_frame_count = -1;
+static unsigned int state_slot = 0;
 
 static gboolean render(GtkGLArea *area, GdkGLContext *context)
 {
@@ -285,6 +286,26 @@ static void on_open_button_activate(GtkMenuItem *open_button, gpointer data)
     gtk_widget_destroy(dialog);
 }
 
+static void on_state_slot_selected(GtkCheckMenuItem *selection, gpointer unused)
+{
+    if (gtk_check_menu_item_get_active(selection))
+    {
+        // Figure out which state slot was selected by looking at the label
+        state_slot = gtk_menu_item_get_label(GTK_MENU_ITEM(selection))[0] - '0';
+        //printf("State %u selected\n", state_slot);
+    }
+}
+
+static void on_quick_load_activate(GtkMenuItem *item, gpointer unused)
+{
+    retrocore_load_state(state_slot);
+}
+
+static void on_quick_save_activate(GtkMenuItem *item, gpointer unused)
+{
+    retrocore_save_state(state_slot);
+}
+
 int main(int argc, char **argv)
 {
     GtkBuilder *builder;
@@ -320,6 +341,32 @@ int main(int argc, char **argv)
 
     // this resolution is lifted from Mednafen's default for PCE games
     gtk_widget_set_size_request(glArea, 864, 696);
+
+    // Set up the menu to select the save state slot. There are 10 slots, numbered from 0 to 9.
+    GtkMenuShell *state_menu = GTK_MENU_SHELL(gtk_builder_get_object(builder, "stateSelectMenu"));
+
+    // Create the menu items for the state slots.
+    GSList *state_group = NULL;
+    for (int i = 0; i < 10; i++)
+    {
+        char text[2] = {"0"};
+        text[0] = '0' + i;
+        GtkWidget *state_entry = state_entry = gtk_radio_menu_item_new_with_label(state_group, text);
+        gtk_menu_shell_append(state_menu, state_entry);
+        g_signal_connect(G_OBJECT(state_entry), "toggled", G_CALLBACK(on_state_slot_selected), NULL);
+
+        if (i == 0)
+        {
+            state_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(state_entry));
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(state_entry), TRUE);
+        }
+    }
+
+    // Connect the quick load/save state functionality.
+    g_signal_connect(gtk_builder_get_object(builder, "quickLoad"), "activate",
+                     G_CALLBACK(on_quick_load_activate), NULL);
+    g_signal_connect(gtk_builder_get_object(builder, "quickSave"), "activate",
+                     G_CALLBACK(on_quick_save_activate), NULL);
 
     gtk_widget_show_all(GTK_WIDGET(window));
 

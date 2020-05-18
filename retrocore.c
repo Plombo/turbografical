@@ -66,9 +66,9 @@ static struct {
 	void (*retro_set_controller_port_device)(unsigned port, unsigned device);
 	void (*retro_reset)(void);
 	void (*retro_run)(void);
-//	size_t retro_serialize_size(void);
-//	bool retro_serialize(void *data, size_t size);
-//	bool retro_unserialize(const void *data, size_t size);
+	size_t (*retro_serialize_size)(void);
+	bool (*retro_serialize)(void *data, size_t size);
+	bool (*retro_unserialize)(const void *data, size_t size);
 //	void retro_cheat_reset(void);
 //	void retro_cheat_set(unsigned index, bool enabled, const char *code);
 	bool (*retro_load_game)(const struct retro_game_info *game);
@@ -411,6 +411,9 @@ static void core_load(const char *sofile) {
 	load_retro_sym(retro_unload_game);
 	load_retro_sym(retro_get_memory_size);
 	load_retro_sym(retro_get_memory_data);
+	load_retro_sym(retro_serialize_size);
+	load_retro_sym(retro_serialize);
+	load_retro_sym(retro_unserialize);
 
 	load_sym(set_environment, retro_set_environment);
 	load_sym(set_video_refresh, retro_set_video_refresh);
@@ -559,6 +562,60 @@ static bool save_sram(const char *path)
     }
     fclose(fp);
     return true;
+}
+
+bool retrocore_load_state(unsigned slot)
+{
+    size_t size = g_retro.retro_serialize_size();
+    void *state = malloc(size);
+
+    char extension[] = {".state.0"};
+    extension[7] = '0' + slot;
+    char *save_path = string_replace_extension(current_game_path, extension);
+    FILE *fp = fopen(save_path, "rb");
+    if (!fp) goto fail;
+    if (fread(state, 1, size, fp) != size) goto fail2;
+    fclose(fp);
+
+    bool result = g_retro.retro_unserialize(state, size);
+    free(state);
+    free(save_path);
+    return result;
+
+fail2:
+    fclose(fp);
+fail:
+    free(save_path);
+    free(state);
+    return false;
+}
+
+bool retrocore_save_state(unsigned slot)
+{
+    size_t size = g_retro.retro_serialize_size();
+    void *state = malloc(size);
+    if (!g_retro.retro_serialize(state, size)) goto fail;
+
+    char extension[] = {".state.0"};
+    extension[7] = '0' + slot;
+    char *save_path = string_replace_extension(current_game_path, extension);
+    FILE *fp = fopen(save_path, "wb");
+    if (!fp) goto fail2;
+    if (fwrite(state, 1, size, fp) != size) goto fail3;
+    fclose(fp);
+
+    printf("Saved state of size %zu to %s\n", size, save_path);
+    free(save_path);
+    free(state);
+    return true;
+
+fail3:
+    fclose(fp);
+fail2:
+    free(save_path);
+fail:
+    free(state);
+    return false;
 }
 
 static void noop() {}

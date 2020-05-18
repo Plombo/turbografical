@@ -112,6 +112,7 @@
                         <property name="image">loadImage</property>
                         <property name="use_stock">False</property>
                         <property name="always_show_image">True</property>
+                        <accelerator key="F8" signal="activate"/>
                       </object>
                     </child>
                     <child>
@@ -122,6 +123,7 @@
                         <property name="use_underline">True</property>
                         <property name="image">saveImage</property>
                         <property name="use_stock">False</property>
+                        <accelerator key="F5" signal="activate"/>
                       </object>
                     </child>
                     <child>
@@ -131,99 +133,9 @@
                         <property name="label" translatable="yes">Change State</property>
                         <property name="use_underline">True</property>
                         <child type="submenu">
-                          <object class="GtkMenu">
+                          <object class="GtkMenu" id="stateSelectMenu">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">0</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">1</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">2</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">3</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">4</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">5</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">6</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">7</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">8</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkRadioMenuItem">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">9</property>
-                                <property name="use_underline">True</property>
-                                <property name="draw_as_radio">True</property>
-                              </object>
-                            </child>
                           </object>
                         </child>
                       </object>
