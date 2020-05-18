@@ -34,14 +34,6 @@ static float g_scale = 3;
 bool running = true;
 
 static struct {
-	GLuint tex_id;
-    GLuint fbo_id;
-    GLuint rbo_id;
-
-    int glmajor;
-    int glminor;
-
-
 	GLuint pitch;
 	GLint tex_w, tex_h;
 	GLuint clip_w, clip_h;
@@ -49,8 +41,6 @@ static struct {
 	GLuint pixfmt;
 	GLuint pixtype;
 	GLuint bpp;
-
-    struct retro_hw_render_callback hw;
 } g_video  = {0};
 
 
@@ -179,15 +169,10 @@ static void video_configure(const struct retro_game_geometry *geom) {
 	g_video.clip_h = geom->base_height;
 
     g_geometry = *geom;
-
-    g_video.hw.context_reset();
 }
 
 
 static bool video_set_pixel_format(unsigned format) {
-	if (g_video.tex_id)
-		die("Tried to change pixel format after initialization.");
-
 	switch (format) {
 	case RETRO_PIXEL_FORMAT_0RGB1555:
 		g_video.pixfmt = GL_UNSIGNED_SHORT_5_5_5_1;
@@ -247,10 +232,6 @@ static void video_refresh(const void *data, unsigned width, unsigned height, uns
 }
 
 static void video_deinit() {
-	if (g_video.tex_id)
-		glDeleteTextures(1, &g_video.tex_id);
-
-	g_video.tex_id = 0;
 }
 
 
@@ -308,10 +289,6 @@ static void core_log(enum retro_log_level level, const char *fmt, ...) {
 		exit(EXIT_FAILURE);
 }
 
-static uintptr_t core_get_current_framebuffer() {
-    return g_video.fbo_id;
-}
-
 static bool core_environment(unsigned cmd, void *data) {
 	bool *bval;
 
@@ -333,13 +310,6 @@ static bool core_environment(unsigned cmd, void *data) {
 
 		return video_set_pixel_format(*fmt);
 	}
-    case RETRO_ENVIRONMENT_SET_HW_RENDER: {
-        struct retro_hw_render_callback *hw = (struct retro_hw_render_callback*)data;
-        hw->get_current_framebuffer = core_get_current_framebuffer;
-        hw->get_proc_address = (retro_hw_get_proc_address_t)SDL_GL_GetProcAddress;
-        g_video.hw = *hw;
-        return true;
-    }
     case RETRO_ENVIRONMENT_SET_FRAME_TIME_CALLBACK: {
         const struct retro_frame_time_callback *frame_time =
             (const struct retro_frame_time_callback*)data;
@@ -630,12 +600,6 @@ void retrocore_init(const char *core_path, const char *game_path)
 {
     if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
         die("Failed to initialize SDL");
-
-    g_video.hw.version_major = 4;
-    g_video.hw.version_minor = 5;
-    g_video.hw.context_type  = RETRO_HW_CONTEXT_OPENGL_CORE;
-    g_video.hw.context_reset   = noop;
-    g_video.hw.context_destroy = noop;
 
     // Load the core.
     core_load(core_path);
