@@ -556,6 +556,14 @@ bool retrocore_load_state(unsigned slot)
     bool result = g_retro.retro_unserialize(state, size);
     free(state);
     free(save_path);
+
+    if (result)
+    {
+        // Set loaded SRAM as "current" so that the SRAM on disk won't be overwritten by
+        // an accidental state load.
+        memcpy(last_sram, g_retro.retro_get_memory_data(RETRO_MEMORY_SAVE_RAM), sizeof(last_sram));
+    }
+
     return result;
 
 fail2:
