@@ -266,6 +266,7 @@ static void audio_init(int frequency) {
         die("Failed to open playback device: %s", SDL_GetError());
 
     SDL_PauseAudioDevice(g_audio.device, 0);
+    g_audio.sample_rate = frequency;
 
     // Let the core know that the audio device has been initialized.
     if (audio_callback.set_state) {
@@ -287,12 +288,16 @@ static size_t audio_write(const int16_t *buf, unsigned frames) {
         double regular_time = retrocore_time();
         double audio_time = (double)g_audio.samples_played / g_audio.sample_rate;
         double difference = (regular_time - audio_time);
-        if (difference >= .1) // 100 ms
+        if (difference >= .05) // 50 ms
         {
             start_time += (regular_time - audio_time) * SDL_GetPerformanceFrequency();
             printf("resync video; move %f ms\n", difference * 1000);
         }
+        //else
+        //    printf("queue empty but not resyncing video; difference is only %.1f ms\n", difference * 1000);
     }
+    //else if ((retrocore_time() - (double)g_audio.samples_played / g_audio.sample_rate) > 0.05)
+    //    printf("queue not empty but audio desynced by %.1f ms\n", retrocore_time() - (double)g_audio.samples_played / g_audio.sample_rate);
 
     //printf("queued audio: %f ms total\n", SDL_GetQueuedAudioSize(g_audio.device) / (4.0*44100) * 1000.0);
     int ret = SDL_QueueAudio(g_audio.device, buf, sizeof(*buf) * frames * 2);
