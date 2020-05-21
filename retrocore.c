@@ -212,6 +212,7 @@ static void video_refresh(const void *data, unsigned width, unsigned height, uns
     {
 		g_video.clip_h = height;
 		g_video.clip_w = width;
+		printf("resolution changed to %u*%u\n", width, height);
 
 		frame->data = realloc(frame->data, pitch * height);
 	}

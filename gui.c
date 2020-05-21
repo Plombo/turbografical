@@ -43,7 +43,7 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
     glViewport(0, 0, allocatedWidth, allocatedHeight);
 
     double rx, ry;
-    if ((double)allocatedWidth / allocatedHeight > 1.2)
+    if ((double)allocatedWidth / allocatedHeight > (6.0/5.0))
     {
         rx = (allocatedHeight / 5.0) * 6.0 / allocatedWidth;
         ry = 1.0;
@@ -92,8 +92,8 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
             GL_RGB, GL_UNSIGNED_SHORT_5_6_5, frame->data);
         GLint coord_scale_loc = glGetUniformLocation(shader_program, "coord_scale");
         glUniform2f(coord_scale_loc, frame->right, frame->bottom);
-        float scaleFactor = MIN((float)allocatedWidth / frame->width,
-                                (float)allocatedHeight / frame->height);
+        float scaleFactor = MAX((float)allocatedWidth * rx / frame->width,
+                                (float)allocatedHeight * ry / frame->height);
         glUniform1f(glGetUniformLocation(shader_program, "scale_factor"), scaleFactor);
     }
 
@@ -339,8 +339,8 @@ int main(int argc, char **argv)
     g_signal_connect(glArea, "render", G_CALLBACK(render), NULL);
     gtk_widget_add_tick_callback(glArea, tick_cb, NULL, NULL);
 
-    // this resolution is lifted from Mednafen's default for PCE games
-    gtk_widget_set_size_request(glArea, 864, 696);
+    // 6:5 aspect ratio with exact 2x scaling on the vertical axis
+    gtk_widget_set_size_request(glArea, 584, 486);
 
     // Set up the menu to select the save state slot. There are 10 slots, numbered from 0 to 9.
     GtkMenuShell *state_menu = GTK_MENU_SHELL(gtk_builder_get_object(builder, "stateSelectMenu"));
