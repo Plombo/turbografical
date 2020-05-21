@@ -247,21 +247,25 @@ static void on_open_button_activate(GtkMenuItem *open_button, gpointer data)
 
     // All supported games filter
     GtkFileFilter *filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "All PC-Engine/TurboGrafx-16 Games (*.pce, *.cue)");
+    gtk_file_filter_set_name(filter, "All PC Engine/TurboGrafx-16 Games (*.pce, *.sgx, *.cue, *.chd)");
     gtk_file_filter_add_pattern(filter, "*.pce");
+    gtk_file_filter_add_pattern(filter, "*.sgx");
     gtk_file_filter_add_pattern(filter, "*.cue");
+    gtk_file_filter_add_pattern(filter, "*.chd");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
 
-    // PCE filter
+    // PC Engine/TurboGrafx-16 ROM filter
     filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "PC-Engine/TurboGrafx-16 ROMs (*.pce)");
+    gtk_file_filter_set_name(filter, "PC Engine/TurboGrafx-16/SuperGrafx ROMs (*.pce, *.sgx)");
     gtk_file_filter_add_pattern(filter, "*.pce");
+    gtk_file_filter_add_pattern(filter, "*.sgx");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
 
-    // CUE filter
+    // CD image filter
     filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "PC-Engine CD/TurboGrafx-CD Games (*.cue)");
+    gtk_file_filter_set_name(filter, "PC Engine CD/TurboGrafx-CD Games (*.cue, *.chd)");
     gtk_file_filter_add_pattern(filter, "*.cue");
+    gtk_file_filter_add_pattern(filter, "*.chd");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
 
     // All files filter
