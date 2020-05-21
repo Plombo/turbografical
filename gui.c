@@ -42,6 +42,10 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
     glClear(GL_COLOR_BUFFER_BIT);
     glViewport(0, 0, allocatedWidth, allocatedHeight);
 
+    // if the emulator isn't running, we're done after clearing to black
+    if (!emu_thread)
+        return true;
+
     double rx, ry;
     if ((double)allocatedWidth / allocatedHeight > (6.0/5.0))
     {
@@ -224,9 +228,26 @@ static gboolean handle_key_release(GtkWidget *widget, GdkEventKey *event)
     return TRUE;
 }
 
+static void close_game()
+{
+    if (!emu_thread)
+        return;
+
+    g_mutex_lock(&g_frame_lock);
+    retrocore_close_game();
+    g_cond_signal(&g_ready_cond);
+    g_mutex_unlock(&g_frame_lock);
+    g_thread_join(emu_thread);
+    emu_thread = NULL;
+}
+
 static void load_game(const char *path)
 {
-    retrocore_init("./mednafen_pce_libretro.so", path);
+    if (emu_thread)
+        close_game();
+
+    retrocore_init("./mednafen_pce_libretro.so");
+    retrocore_load_game(path);
     emu_thread = g_thread_new("emulator", retrocore_run_game, NULL);
 }
 
@@ -290,6 +311,11 @@ static void on_open_button_activate(GtkMenuItem *open_button, gpointer data)
     gtk_widget_destroy(dialog);
 }
 
+static void on_close_button_activate(GtkMenuItem *button, gpointer data)
+{
+    close_game();
+}
+
 static void on_state_slot_selected(GtkCheckMenuItem *selection, gpointer unused)
 {
     if (gtk_check_menu_item_get_active(selection))
@@ -334,6 +360,7 @@ int main(int argc, char **argv)
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
     g_signal_connect(gtk_builder_get_object(builder, "openButton"), "activate", G_CALLBACK(on_open_button_activate), builder);
+    g_signal_connect(gtk_builder_get_object(builder, "closeButton"), "activate", G_CALLBACK(on_close_button_activate), builder);
 
     // Create the GtkGlArea
     glArea = gtk_gl_area_new();

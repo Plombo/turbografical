@@ -31,7 +31,7 @@ int g_next_frame = 0;
 static Uint64 start_time = 0;
 
 static float g_scale = 3;
-bool running = true;
+bool running = false;
 
 static struct {
 	GLuint pitch;
@@ -199,7 +199,9 @@ static bool video_set_pixel_format(unsigned format) {
 
 static void video_refresh(const void *data, unsigned width, unsigned height, unsigned pitch) {
     g_mutex_lock(&g_frame_lock);
-    if (retrocore_time() < g_frames[g_next_frame].presentation_time)
+    // Check "running" here because if it's false, the GUI thread is waiting for this thread to
+    // exit, so waiting on the condition would cause a deadlock.
+    if (running && retrocore_time() < g_frames[g_next_frame].presentation_time)
     {
         g_cond_wait(&g_ready_cond, &g_frame_lock);
         //printf("Frame %li woke up %.1f ms early at %.3f s\n", frame_count, (frame_count * target_frame_time - retrocore_time()) * 1000, retrocore_time());
@@ -233,6 +235,12 @@ static void video_refresh(const void *data, unsigned width, unsigned height, uns
 }
 
 static void video_deinit() {
+    if (g_frames[0].data)
+        free(g_frames[0].data);
+    if (g_frames[1].data)
+        free(g_frames[1].data);
+    memset(g_frames, 0, sizeof(g_frames));
+    g_next_frame = 0;
 }
 
 
@@ -266,7 +274,8 @@ static void audio_deinit() {
 }
 
 static size_t audio_write(const int16_t *buf, unsigned frames) {
-    SDL_QueueAudio(g_pcm, buf, sizeof(*buf) * frames * 2);
+    int ret = SDL_QueueAudio(g_pcm, buf, sizeof(*buf) * frames * 2);
+    //printf("queued audio: %zu bytes now, %u bytes total, ret %i\n", sizeof(*buf) * frames * 2, SDL_GetQueuedAudioSize(g_pcm), ret);
     return frames;
 }
 
@@ -406,9 +415,6 @@ static void core_load(const char *sofile) {
 	set_audio_sample(core_audio_sample);
 	set_audio_sample_batch(core_audio_sample_batch);
 
-	g_retro.retro_init();
-	g_retro.initialized = true;
-
 	puts("Core loaded");
 }
 
@@ -472,12 +478,20 @@ retro_time_t cpu_features_get_time_usec(void) {
     return (retro_time_t)SDL_GetTicks();
 }
 
-static void core_unload() {
+static void core_unload()
+{
 	if (g_retro.initialized)
+	{
+	    g_retro.retro_unload_game();
 		g_retro.retro_deinit();
+		g_retro.initialized = false;
+    }
 
 	if (g_retro.handle)
+	{
         SDL_UnloadObject(g_retro.handle);
+        g_retro.handle = NULL;
+    }
 }
 
 // returns a newly allocated string; it's the caller's responsibility to free it
@@ -605,13 +619,20 @@ fail:
 
 static void noop() {}
 
-void retrocore_init(const char *core_path, const char *game_path)
+void retrocore_init(const char *core_path)
 {
     if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
         die("Failed to initialize SDL");
 
     // Load the core.
     core_load(core_path);
+}
+
+void retrocore_load_game(const char *game_path)
+{
+    // Initializes the core.
+    g_retro.retro_init();
+	g_retro.initialized = true;
 
     // Load the game.
     core_load_game(game_path);
@@ -634,6 +655,7 @@ void retrocore_init(const char *core_path, const char *game_path)
 gpointer retrocore_run_game(gpointer data)
 {
     start_time = 0;
+    running = true;
 
     while (running) {
         // Update the game loop timer.
@@ -672,19 +694,21 @@ gpointer retrocore_run_game(gpointer data)
 		++frame_count;
 	}
 
-    return NULL;
-}
-
-void retrocore_quit()
-{
+    // The game is being closed, so unload everything.
     core_unload();
 	audio_deinit();
 	video_deinit();
 
     free(current_game_path);
     current_game_path = NULL;
+    frame_count = 0;
     memset(last_sram, 0, sizeof(last_sram));
 
-    SDL_Quit();
+    return NULL;
+}
+
+void retrocore_close_game()
+{
+    running = false;
 }
 

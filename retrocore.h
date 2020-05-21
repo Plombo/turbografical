@@ -33,8 +33,10 @@ bool retrocore_save_state(unsigned slot);
 
 void handle_key_event(unsigned keyval, bool pressed);
 
-void retrocore_init(const char *core_path, const char *game_path);
+void retrocore_init(const char *core_path);
+void retrocore_load_game(const char *game_path);
 gpointer retrocore_run_game(gpointer data);
+void retrocore_close_game();
 
 #endif
 
