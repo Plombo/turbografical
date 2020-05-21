@@ -361,6 +361,7 @@ int main(int argc, char **argv)
 
     g_signal_connect(gtk_builder_get_object(builder, "openButton"), "activate", G_CALLBACK(on_open_button_activate), builder);
     g_signal_connect(gtk_builder_get_object(builder, "closeButton"), "activate", G_CALLBACK(on_close_button_activate), builder);
+    g_signal_connect(gtk_builder_get_object(builder, "exitButton"), "activate", G_CALLBACK(gtk_main_quit), builder);
 
     // Create the GtkGlArea
     glArea = gtk_gl_area_new();
