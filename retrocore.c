@@ -14,7 +14,6 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
-static SDL_AudioDeviceID g_pcm = 0;
 static struct retro_frame_time_callback runloop_frame_time;
 static retro_usec_t runloop_frame_time_last = 0;
 static struct retro_audio_callback audio_callback;
@@ -42,6 +41,12 @@ static struct {
 	GLuint pixtype;
 	GLuint bpp;
 } g_video  = {0};
+
+static struct {
+    SDL_AudioDeviceID device;
+    uint64_t samples_played;
+    int sample_rate;
+} g_audio = {0};
 
 
 static struct {
@@ -254,13 +259,13 @@ static void audio_init(int frequency) {
     desired.format = AUDIO_S16;
     desired.freq   = frequency;
     desired.channels = 2;
-    desired.samples = 4096;
+    desired.samples = 1596;
 
-    g_pcm = SDL_OpenAudioDevice(NULL, 0, &desired, &obtained, 0);
-    if (!g_pcm)
+    g_audio.device = SDL_OpenAudioDevice(NULL, 0, &desired, &obtained, 0);
+    if (!g_audio.device)
         die("Failed to open playback device: %s", SDL_GetError());
 
-    SDL_PauseAudioDevice(g_pcm, 0);
+    SDL_PauseAudioDevice(g_audio.device, 0);
 
     // Let the core know that the audio device has been initialized.
     if (audio_callback.set_state) {
@@ -270,12 +275,28 @@ static void audio_init(int frequency) {
 
 
 static void audio_deinit() {
-    SDL_CloseAudioDevice(g_pcm);
+    SDL_CloseAudioDevice(g_audio.device);
+    g_audio.samples_played = 0;
 }
 
 static size_t audio_write(const int16_t *buf, unsigned frames) {
-    int ret = SDL_QueueAudio(g_pcm, buf, sizeof(*buf) * frames * 2);
-    //printf("queued audio: %zu bytes now, %u bytes total, ret %i\n", sizeof(*buf) * frames * 2, SDL_GetQueuedAudioSize(g_pcm), ret);
+    // If there's been a break in audio playback, and the audio is more than 100 ms
+    // behind where it should be, change the clock to re-sync video to audio.
+    if (SDL_GetQueuedAudioSize(g_audio.device) == 0)
+    {
+        double regular_time = retrocore_time();
+        double audio_time = (double)g_audio.samples_played / g_audio.sample_rate;
+        double difference = (regular_time - audio_time);
+        if (difference >= .1) // 100 ms
+        {
+            start_time += (regular_time - audio_time) * SDL_GetPerformanceFrequency();
+            printf("resync video; move %f ms\n", difference * 1000);
+        }
+    }
+
+    //printf("queued audio: %f ms total\n", SDL_GetQueuedAudioSize(g_audio.device) / (4.0*44100) * 1000.0);
+    int ret = SDL_QueueAudio(g_audio.device, buf, sizeof(*buf) * frames * 2);
+    g_audio.samples_played += frames;
     return frames;
 }
 
