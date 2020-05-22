@@ -25,6 +25,7 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
+static GtkBuilder *builder = NULL;
 static GLuint shader_program = 0;
 static bool texture_inited = 0;
 static GThread *emu_thread = NULL;
@@ -363,9 +364,27 @@ static void on_reset_button_activate(GtkMenuItem *button, gpointer data)
     free(rom_path2);
 }
 
+static void on_video_size_selected(GtkCheckMenuItem *selection, gpointer data)
+{
+    if (gtk_check_menu_item_get_active(selection))
+    {
+        // Figure out which scale factor was selected by looking at the label.
+        int video_scale = gtk_menu_item_get_label(GTK_MENU_ITEM(selection))[0] - '0';
+
+        // Resize the rendering area to the selected size.
+        GtkWidget *gl_area = (GtkWidget*) data;
+        gtk_widget_set_size_request(gl_area, (int) 243 * video_scale * 1.2, 243 * video_scale);
+
+        // Now resize the window to match.
+        GtkWindow *window = GTK_WINDOW(gtk_builder_get_object(builder, "mainWindow"));
+        GtkRequisition min, natural;
+        gtk_widget_get_preferred_size(GTK_WIDGET(window), &min, &natural);
+        gtk_window_resize(window, natural.width, natural.height);
+    }
+}
+
 int main(int argc, char **argv)
 {
-    GtkBuilder *builder;
     GObject *window;
     GObject *box;
     GtkWidget *glArea;
@@ -421,6 +440,23 @@ int main(int argc, char **argv)
             state_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(state_entry));
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(state_entry), TRUE);
         }
+    }
+
+    // Set up the menu to select the video scale factor.
+    GtkMenuShell *video_size_menu = GTK_MENU_SHELL(gtk_builder_get_object(builder, "videoSizeMenu"));
+    GSList *video_size_group = NULL;
+    for (int i = 1; i < 5; i++)
+    {
+        char text[3] = {"1x"};
+        text[0] = '0' + i;
+        GtkWidget *entry = gtk_radio_menu_item_new_with_label(video_size_group, text);
+        gtk_menu_shell_append(video_size_menu, entry);
+        g_signal_connect(G_OBJECT(entry), "toggled", G_CALLBACK(on_video_size_selected), glArea);
+
+        if (i == 1)
+            video_size_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(entry));
+        if (i == 2)
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(entry), TRUE);
     }
 
     // Connect the quick load/save state functionality.
