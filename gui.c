@@ -28,6 +28,7 @@
 static GLuint shader_program = 0;
 static bool texture_inited = 0;
 static GThread *emu_thread = NULL;
+static char *rom_path = NULL;
 GMutex g_frame_lock = {0};
 GCond g_ready_cond = {0};
 int64_t last_frame_count = -1;
@@ -239,6 +240,8 @@ static void close_game()
     g_mutex_unlock(&g_frame_lock);
     g_thread_join(emu_thread);
     emu_thread = NULL;
+    free(rom_path);
+    rom_path = NULL;
 }
 
 static void load_game(const char *path)
@@ -249,6 +252,7 @@ static void load_game(const char *path)
     retrocore_init("./mednafen_pce_libretro.so");
     retrocore_load_game(path);
     emu_thread = g_thread_new("emulator", retrocore_run_game, NULL);
+    rom_path = strdup(path);
 }
 
 static void on_open_button_activate(GtkMenuItem *open_button, gpointer data)
@@ -338,7 +342,25 @@ static void on_quick_save_activate(GtkMenuItem *item, gpointer unused)
 
 static void on_pause_button_activate(GtkMenuItem *button, gpointer data)
 {
+    if (!emu_thread)
+        return;
+
     retrocore_toggle_pause();
+}
+
+static void on_reset_button_activate(GtkMenuItem *button, gpointer data)
+{
+    if (!emu_thread)
+        return;
+
+    // There is a retro_reset() function in libretro, but using it with the
+    // beetle-pce core will trigger various assertion failures. There was no
+    // "reset" button on any PC Engine or TurboGrafx-16, so resetting is the
+    // same as just power cycling anyway.
+    char *rom_path2 = strdup(rom_path);
+    close_game();
+    load_game(rom_path2);
+    free(rom_path2);
 }
 
 int main(int argc, char **argv)
@@ -368,6 +390,7 @@ int main(int argc, char **argv)
     g_signal_connect(gtk_builder_get_object(builder, "closeButton"), "activate", G_CALLBACK(on_close_button_activate), builder);
     g_signal_connect(gtk_builder_get_object(builder, "exitButton"), "activate", G_CALLBACK(gtk_main_quit), builder);
     g_signal_connect(gtk_builder_get_object(builder, "pauseButton"), "activate", G_CALLBACK(on_pause_button_activate), builder);
+    g_signal_connect(gtk_builder_get_object(builder, "resetButton"), "activate", G_CALLBACK(on_reset_button_activate), builder);
 
     // Create the GtkGlArea
     glArea = gtk_gl_area_new();
