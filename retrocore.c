@@ -32,6 +32,9 @@ static Uint64 start_time = 0;
 static float g_scale = 3;
 bool running = false;
 
+static bool paused = false;
+static Uint64 pause_time;
+
 static struct {
 	GLuint pitch;
 	GLint tex_w, tex_h;
@@ -120,11 +123,44 @@ static void die(const char *fmt, ...) {
 	exit(EXIT_FAILURE);
 }
 
+// Return the master timer (time in seconds since system power on)
 double retrocore_time(void)
 {
     if (start_time == 0)
         start_time = SDL_GetPerformanceCounter();
+    if (paused)
+        return (pause_time - start_time) / (double)SDL_GetPerformanceFrequency();
     return (SDL_GetPerformanceCounter() - start_time) / (double)SDL_GetPerformanceFrequency();
+}
+
+// Pause the emulation.
+void retrocore_pause(void)
+{
+    if (paused)
+        return;
+
+    paused = true;
+    pause_time = SDL_GetPerformanceCounter();
+    SDL_PauseAudioDevice(g_audio.device, 1);
+}
+
+// Unpauses the emulation.
+void retrocore_unpause(void)
+{
+    if (!paused)
+        return;
+
+    paused = false;
+    start_time += SDL_GetPerformanceCounter() - pause_time;
+    SDL_PauseAudioDevice(g_audio.device, 0);
+}
+
+void retrocore_toggle_pause(void)
+{
+    if (paused)
+        retrocore_unpause();
+    else
+        retrocore_pause();
 }
 
 void handle_key_event(unsigned keyval, bool pressed)
@@ -682,6 +718,7 @@ gpointer retrocore_run_game(gpointer data)
 {
     start_time = 0;
     running = true;
+    paused = false;
 
     while (running) {
         // Update the game loop timer.

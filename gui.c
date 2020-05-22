@@ -336,6 +336,11 @@ static void on_quick_save_activate(GtkMenuItem *item, gpointer unused)
     retrocore_save_state(state_slot);
 }
 
+static void on_pause_button_activate(GtkMenuItem *button, gpointer data)
+{
+    retrocore_toggle_pause();
+}
+
 int main(int argc, char **argv)
 {
     GtkBuilder *builder;
@@ -362,6 +367,7 @@ int main(int argc, char **argv)
     g_signal_connect(gtk_builder_get_object(builder, "openButton"), "activate", G_CALLBACK(on_open_button_activate), builder);
     g_signal_connect(gtk_builder_get_object(builder, "closeButton"), "activate", G_CALLBACK(on_close_button_activate), builder);
     g_signal_connect(gtk_builder_get_object(builder, "exitButton"), "activate", G_CALLBACK(gtk_main_quit), builder);
+    g_signal_connect(gtk_builder_get_object(builder, "pauseButton"), "activate", G_CALLBACK(on_pause_button_activate), builder);
 
     // Create the GtkGlArea
     glArea = gtk_gl_area_new();

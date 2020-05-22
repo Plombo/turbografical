@@ -28,6 +28,10 @@ extern struct retro_game_geometry g_geometry;
 // returns time from core startup in seconds
 double retrocore_time(void);
 
+void retrocore_pause(void);
+void retrocore_unpause(void);
+void retrocore_toggle_pause(void);
+
 bool retrocore_load_state(unsigned slot);
 bool retrocore_save_state(unsigned slot);
 
