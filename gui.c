@@ -94,7 +94,6 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
     if (frame->data != NULL)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 2); // it would be better to get the "2" from the provided pixel format
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, frame->pitch / 2);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame->width, frame->height,
             GL_RGB, GL_UNSIGNED_SHORT_5_6_5, frame->data);
         GLint coord_scale_loc = glGetUniformLocation(shader_program, "coord_scale");

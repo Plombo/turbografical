@@ -267,8 +267,16 @@ static void video_refresh(const void *data, unsigned width, unsigned height, uns
     frame->pitch = pitch;
     frame->bottom = (float)g_video.clip_h / g_video.tex_h;
     frame->right  = (float)g_video.clip_w / g_video.tex_w;
-    if (data && data != RETRO_HW_FRAME_BUFFER_VALID) {
-        memcpy(frame->data, data, pitch * height);
+    if (data && data != RETRO_HW_FRAME_BUFFER_VALID)
+    {
+        const uint8_t *src = (const uint8_t*) data;
+        uint8_t *dst = (uint8_t*) frame->data;
+        for (int y = 0; y < height; ++y)
+        {
+            memcpy(dst, src, width * 2);
+            src += pitch;
+            dst += width * 2;
+        }
     }
     //if (retrocore_time() >= frame->presentation_time)
     //    printf("Frame %li finished %.1f ms late at %.3f s\n", frame_count, (retrocore_time() - frame->presentation_time) * 1000, retrocore_time());
