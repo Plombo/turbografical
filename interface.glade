@@ -235,6 +235,15 @@
                         </child>
                       </object>
                     </child>
+                    <child>
+                      <object class="GtkMenuItem" id="fullscreenButton">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="label" translatable="yes">Fullscreen</property>
+                        <property name="use_underline">True</property>
+                        <accelerator key="Return" signal="activate" modifiers="GDK_MOD1_MASK"/>
+                      </object>
+                    </child>
                   </object>
                 </child>
               </object>

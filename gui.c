@@ -34,6 +34,7 @@ GMutex g_frame_lock = {0};
 GCond g_ready_cond = {0};
 int64_t last_frame_count = -1;
 static unsigned int state_slot = 0;
+static bool g_fullscreen = false;
 
 static gboolean render(GtkGLArea *area, GdkGLContext *context)
 {
@@ -230,6 +231,25 @@ static gboolean handle_key_release(GtkWidget *widget, GdkEventKey *event)
     return TRUE;
 }
 
+static void on_window_state_change(GtkWidget *widget, GdkEvent *ev, gpointer user_data)
+{
+    if (ev->type != GDK_WINDOW_STATE)
+        return;
+
+    GdkEventWindowState *event = (GdkEventWindowState *) ev;
+    if (event->changed_mask & GDK_WINDOW_STATE_FULLSCREEN)
+    {
+        if (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN)
+        {
+            g_fullscreen = true;
+        }
+        else
+        {
+            g_fullscreen = false;
+        }
+    }
+}
+
 static void close_game()
 {
     if (!emu_thread)
@@ -383,6 +403,15 @@ static void on_video_size_selected(GtkCheckMenuItem *selection, gpointer data)
     }
 }
 
+static void on_fullscreen_button_activate(GtkMenuItem *button, gpointer data)
+{
+    GtkWindow *window = GTK_WINDOW(gtk_builder_get_object(builder, "mainWindow"));
+    if (g_fullscreen)
+        gtk_window_unfullscreen(window);
+    else
+        gtk_window_fullscreen(window);
+}
+
 int main(int argc, char **argv)
 {
     GObject *window;
@@ -404,12 +433,14 @@ int main(int argc, char **argv)
     // Connect signal handlers to the constructed widgets
     window = gtk_builder_get_object(builder, "mainWindow");
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(window, "window-state-event", G_CALLBACK(on_window_state_change), NULL);
 
     g_signal_connect(gtk_builder_get_object(builder, "openButton"), "activate", G_CALLBACK(on_open_button_activate), builder);
     g_signal_connect(gtk_builder_get_object(builder, "closeButton"), "activate", G_CALLBACK(on_close_button_activate), builder);
     g_signal_connect(gtk_builder_get_object(builder, "exitButton"), "activate", G_CALLBACK(gtk_main_quit), builder);
     g_signal_connect(gtk_builder_get_object(builder, "pauseButton"), "activate", G_CALLBACK(on_pause_button_activate), builder);
     g_signal_connect(gtk_builder_get_object(builder, "resetButton"), "activate", G_CALLBACK(on_reset_button_activate), builder);
+    g_signal_connect(gtk_builder_get_object(builder, "fullscreenButton"), "activate", G_CALLBACK(on_fullscreen_button_activate), builder);
 
     // Create the GtkGlArea
     glArea = gtk_gl_area_new();
