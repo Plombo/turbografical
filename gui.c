@@ -236,17 +236,36 @@ static void on_window_state_change(GtkWidget *widget, GdkEvent *ev, gpointer use
         return;
 
     GdkEventWindowState *event = (GdkEventWindowState *) ev;
+    GtkWidget *menu_bar = GTK_WIDGET(gtk_builder_get_object(builder, "menuBar"));
     if (event->changed_mask & GDK_WINDOW_STATE_FULLSCREEN)
     {
+        // Hide the menu bar in fullscreen until the user moves the mouse
+        // pointer to the top of the screen.
         if (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN)
         {
             g_fullscreen = true;
+            gtk_widget_set_visible(menu_bar, FALSE);
         }
         else
         {
             g_fullscreen = false;
+            gtk_widget_set_visible(menu_bar, TRUE);
         }
     }
+}
+
+// Responsible for showing/hiding the menu bar in fullscreen depending on cursor position.
+static gboolean on_mouse_pointer_move(GtkWidget *widget, GdkEvent *ev, gpointer unused)
+{
+    GdkEventMotion *event = (GdkEventMotion *) ev;
+    if (g_fullscreen)
+    {
+        // Show the menu bar in fullscreen only if the mouse pointer is in the top 10% of the screen.
+        GtkWidget *menu_bar = GTK_WIDGET(gtk_builder_get_object(builder, "menuBar"));
+        int height = gtk_widget_get_allocated_height(widget);
+        gtk_widget_set_visible(menu_bar, event->y < height / 10.0);
+    }
+    return FALSE;
 }
 
 static void close_game()
@@ -406,9 +425,29 @@ static void on_fullscreen_button_activate(GtkMenuItem *button, gpointer data)
 {
     GtkWindow *window = GTK_WINDOW(gtk_builder_get_object(builder, "mainWindow"));
     if (g_fullscreen)
+    {
         gtk_window_unfullscreen(window);
+    }
     else
+    {
         gtk_window_fullscreen(window);
+    }
+}
+
+// By default, accelerators for menu items won't fire if the menu bar is
+// hidden. Returning  TRUE from this function, connected to the
+// "can-activate-accel" signal, overrides this behavior so that keyboard
+// shortcuts work even when the menu bar is hidden in fullscreen.
+gboolean can_activate_accel(GtkWidget *widget, guint signal_id, gpointer user_data)
+{
+    return TRUE;
+}
+
+void setup_menu_item(const char *name, GCallback callback, gpointer cb_user_data)
+{
+    GObject *obj = gtk_builder_get_object(builder, name);
+    g_signal_connect(obj, "activate", callback, cb_user_data);
+    g_signal_connect(obj, "can-activate-accel", G_CALLBACK(can_activate_accel), NULL);
 }
 
 int main(int argc, char **argv)
@@ -433,13 +472,14 @@ int main(int argc, char **argv)
     window = gtk_builder_get_object(builder, "mainWindow");
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
     g_signal_connect(window, "window-state-event", G_CALLBACK(on_window_state_change), NULL);
+    g_signal_connect(window, "motion-notify-event", G_CALLBACK(on_mouse_pointer_move), NULL);
 
-    g_signal_connect(gtk_builder_get_object(builder, "openButton"), "activate", G_CALLBACK(on_open_button_activate), builder);
-    g_signal_connect(gtk_builder_get_object(builder, "closeButton"), "activate", G_CALLBACK(on_close_button_activate), builder);
-    g_signal_connect(gtk_builder_get_object(builder, "exitButton"), "activate", G_CALLBACK(gtk_main_quit), builder);
-    g_signal_connect(gtk_builder_get_object(builder, "pauseButton"), "activate", G_CALLBACK(on_pause_button_activate), builder);
-    g_signal_connect(gtk_builder_get_object(builder, "resetButton"), "activate", G_CALLBACK(on_reset_button_activate), builder);
-    g_signal_connect(gtk_builder_get_object(builder, "fullscreenButton"), "activate", G_CALLBACK(on_fullscreen_button_activate), builder);
+    setup_menu_item("openButton", G_CALLBACK(on_open_button_activate), builder);
+    setup_menu_item("closeButton", G_CALLBACK(on_close_button_activate), builder);
+    setup_menu_item("exitButton", G_CALLBACK(gtk_main_quit), builder);
+    setup_menu_item("pauseButton", G_CALLBACK(on_pause_button_activate), builder);
+    setup_menu_item("resetButton", G_CALLBACK(on_reset_button_activate), builder);
+    setup_menu_item("fullscreenButton", G_CALLBACK(on_fullscreen_button_activate), builder);
 
     // Create the GtkGlArea
     glArea = gtk_gl_area_new();
@@ -447,7 +487,12 @@ int main(int argc, char **argv)
     gtk_box_pack_end(GTK_BOX(box), glArea, TRUE, TRUE, 0);
     g_signal_connect(glArea, "realize", G_CALLBACK(on_realize_gl_area), NULL);
     g_signal_connect(glArea, "render", G_CALLBACK(render), NULL);
+
+    // Make the GL area update at the monitor's refresh rate.
     gtk_widget_add_tick_callback(glArea, tick_cb, NULL, NULL);
+
+    // Without this, the window won't get mouse movement events when the pointer is over the GL area.
+    gtk_widget_add_events(glArea, GDK_POINTER_MOTION_MASK);
 
     // 6:5 aspect ratio with exact 2x scaling on the vertical axis
     gtk_widget_set_size_request(glArea, 584, 486);
@@ -490,10 +535,8 @@ int main(int argc, char **argv)
     }
 
     // Connect the quick load/save state functionality.
-    g_signal_connect(gtk_builder_get_object(builder, "quickLoad"), "activate",
-                     G_CALLBACK(on_quick_load_activate), NULL);
-    g_signal_connect(gtk_builder_get_object(builder, "quickSave"), "activate",
-                     G_CALLBACK(on_quick_save_activate), NULL);
+    setup_menu_item("quickLoad", G_CALLBACK(on_quick_load_activate), NULL);
+    setup_menu_item("quickSave", G_CALLBACK(on_quick_save_activate), NULL);
 
     gtk_widget_show_all(GTK_WIDGET(window));
 
