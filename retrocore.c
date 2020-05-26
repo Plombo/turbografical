@@ -6,6 +6,7 @@
 #include "SDL.h"
 #include "libretro.h"
 #include "retrocore.h"
+#include "util.h"
 
 #include <glib.h>
 #include <gdk/gdk.h>
@@ -562,29 +563,6 @@ static void core_unload()
         SDL_UnloadObject(g_retro.handle);
         g_retro.handle = NULL;
     }
-}
-
-// returns a newly allocated string; it's the caller's responsibility to free it
-// example: string_replace_extension("/path/to/gamename.pce", ".sav") -> "/path/to/gamename.sav"
-static char * string_replace_extension(const char *original, const char *extension)
-{
-    char *dot_pos = strrchr(original, '.'), *result;
-    size_t orig_len, ext_len = strlen(extension);
-    if (!dot_pos || strchr(dot_pos, '/') || strchr(dot_pos, '\\'))
-    {
-        // file has no extension
-        orig_len = strlen(original);
-    }
-    else
-    {
-        // file has an extension that starts with dot_pos
-        orig_len = dot_pos - original;
-    }
-    result = malloc(orig_len + ext_len + 1);
-    memcpy(result, original, orig_len);
-    memcpy(result + orig_len, extension, ext_len);
-    result[orig_len + ext_len] = 0;
-    return result;
 }
 
 static bool load_sram(const char *path)

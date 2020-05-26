@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <gtk/gtk.h>
+#include "util.h"
 #include "retrocore.h"
 
 #define GL_GLEXT_PROTOTYPES
