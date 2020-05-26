@@ -30,6 +30,7 @@ static GtkBuilder *builder = NULL;
 
 static GLuint shader_program = 0;
 static bool texture_inited = 0;
+static GLsizei texture_w = 0, texture_h = 0;
 
 static GThread *emu_thread = NULL;
 static char *rom_path = NULL;
@@ -73,14 +74,6 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
     GLint aspect_scale_loc = glGetUniformLocation(shader_program, "aspect_scale");
     glUniform2f(aspect_scale_loc, rx, ry);
 
-    if (!texture_inited && g_geometry.max_width)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, g_geometry.max_width, g_geometry.max_height, 0,
-                     GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
-        glUniform2f(glGetUniformLocation(shader_program, "tex_dims"), g_geometry.max_width, g_geometry.max_height);
-        texture_inited = true;
-    }
-
     g_mutex_lock(&g_frame_lock);
     struct video_frame *frame;
     double now = retrocore_time();
@@ -102,11 +95,18 @@ static gboolean render(GtkGLArea *area, GdkGLContext *context)
 
     if (frame->data != NULL)
     {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 2); // it would be better to get the "2" from the provided pixel format
+        if (!texture_inited || texture_w != frame->width || texture_h != frame->height)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame->width, frame->height, 0,
+                         GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
+            glUniform2f(glGetUniformLocation(shader_program, "tex_dims"), frame->width, frame->height);
+            texture_inited = true;
+            texture_w = frame->width;
+            texture_h = frame->height;
+        }
+
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame->width, frame->height,
             GL_RGB, GL_UNSIGNED_SHORT_5_6_5, frame->data);
-        GLint coord_scale_loc = glGetUniformLocation(shader_program, "coord_scale");
-        glUniform2f(coord_scale_loc, frame->right, frame->bottom);
         float scaleFactor = MAX((float)allocatedWidth * rx / frame->width,
                                 (float)allocatedHeight * ry / frame->height);
         glUniform1f(glGetUniformLocation(shader_program, "scale_factor"), scaleFactor);
@@ -181,9 +181,8 @@ static void on_realize_gl_area(GtkGLArea *area)
     "in vec2 in_coord;\n"
     "out vec2 tex_coord;\n"
     "uniform vec2 aspect_scale;\n"
-    "uniform vec2 coord_scale;\n"
     "void main() {\n"
-    "    tex_coord = in_coord * coord_scale;\n"
+    "    tex_coord = in_coord;\n"
     "    gl_Position = vec4(position * aspect_scale, 1.0, 1.0);\n"
     "}";
 
@@ -217,6 +216,8 @@ static void on_realize_gl_area(GtkGLArea *area)
     glUseProgram(shader_program);
     glUniform1i(glGetUniformLocationARB(shader_program, "texture"), 0);
     glBindVertexArray(vao);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
 }
 
 // callback that makes the GL area redraw on every frame
