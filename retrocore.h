@@ -20,6 +20,9 @@ struct video_frame {
 extern GMutex g_frame_lock;
 extern GCond g_ready_cond;
 
+// Path to the current ROM or disc image, or NULL if nothing is loaded.
+extern char *g_current_game_path;
+
 extern struct video_frame g_frames[];
 extern int g_next_frame;
 extern double target_frame_time;
@@ -32,8 +35,8 @@ void retrocore_pause(void);
 void retrocore_unpause(void);
 void retrocore_toggle_pause(void);
 
-bool retrocore_load_state(unsigned slot);
-bool retrocore_save_state(unsigned slot);
+bool retrocore_load_state(const char *path);
+bool retrocore_save_state(const char *path);
 
 void handle_key_event(unsigned keyval, bool pressed);
 

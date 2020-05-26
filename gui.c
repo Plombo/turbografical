@@ -391,6 +391,60 @@ static void on_close_button_activate(GtkMenuItem *button, gpointer data)
     close_game();
 }
 
+static void on_load_state_activate(GtkMenuItem *item, gpointer unused)
+{
+    if (!emu_thread)
+        return;
+
+    GtkWindow *parent_window = GTK_WINDOW(gtk_builder_get_object(builder, "mainWindow"));
+    GtkWidget *dialog = gtk_file_chooser_dialog_new("Select state",
+                                         parent_window,
+                                         GTK_FILE_CHOOSER_ACTION_OPEN,
+                                         "_Cancel",
+                                         GTK_RESPONSE_CANCEL,
+                                         "_Open",
+                                         GTK_RESPONSE_ACCEPT,
+                                         NULL);
+
+    gint res = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (res == GTK_RESPONSE_ACCEPT)
+    {
+        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
+        char *filename = gtk_file_chooser_get_filename(chooser);
+        retrocore_load_state(filename);
+        g_free(filename);
+    }
+
+    gtk_widget_destroy(dialog);
+}
+
+static void on_save_state_as_activate(GtkMenuItem *item, gpointer unused)
+{
+    if (!emu_thread)
+        return;
+
+    GtkWindow *parent_window = GTK_WINDOW(gtk_builder_get_object(builder, "mainWindow"));
+    GtkWidget *dialog = gtk_file_chooser_dialog_new("Select save location",
+                                         parent_window,
+                                         GTK_FILE_CHOOSER_ACTION_SAVE,
+                                         "_Cancel",
+                                         GTK_RESPONSE_CANCEL,
+                                         "_Open",
+                                         GTK_RESPONSE_ACCEPT,
+                                         NULL);
+
+    gint res = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (res == GTK_RESPONSE_ACCEPT)
+    {
+        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
+        char *filename = gtk_file_chooser_get_filename(chooser);
+        retrocore_save_state(filename);
+        g_free(filename);
+    }
+
+    gtk_widget_destroy(dialog);
+}
+
 static void on_state_slot_selected(GtkCheckMenuItem *selection, gpointer unused)
 {
     if (gtk_check_menu_item_get_active(selection))
@@ -403,12 +457,26 @@ static void on_state_slot_selected(GtkCheckMenuItem *selection, gpointer unused)
 
 static void on_quick_load_activate(GtkMenuItem *item, gpointer unused)
 {
-    retrocore_load_state(state_slot);
+    if (!emu_thread)
+        return;
+
+    char extension[] = {".state.0"};
+    extension[7] = '0' + state_slot;
+    char *save_path = string_replace_extension(g_current_game_path, extension);
+    retrocore_load_state(save_path);
+    free(save_path);
 }
 
 static void on_quick_save_activate(GtkMenuItem *item, gpointer unused)
 {
-    retrocore_save_state(state_slot);
+    if (!emu_thread)
+        return;
+
+    char extension[] = {".state.0"};
+    extension[7] = '0' + state_slot;
+    char *save_path = string_replace_extension(g_current_game_path, extension);
+    retrocore_save_state(save_path);
+    free(save_path);
 }
 
 static void on_pause_button_activate(GtkMenuItem *button, gpointer data)
@@ -508,6 +576,8 @@ int main(int argc, char **argv)
 
     setup_menu_item("openButton", G_CALLBACK(on_open_button_activate), builder);
     setup_menu_item("closeButton", G_CALLBACK(on_close_button_activate), builder);
+    setup_menu_item("loadState", G_CALLBACK(on_load_state_activate), builder);
+    setup_menu_item("saveStateAs", G_CALLBACK(on_save_state_as_activate), builder);
     setup_menu_item("exitButton", G_CALLBACK(gtk_main_quit), builder);
     setup_menu_item("pauseButton", G_CALLBACK(on_pause_button_activate), builder);
     setup_menu_item("resetButton", G_CALLBACK(on_reset_button_activate), builder);

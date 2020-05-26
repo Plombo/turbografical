@@ -21,7 +21,7 @@ static struct retro_audio_callback audio_callback;
 static int64_t frame_count = 0;
 double target_frame_time = 0.165;
 
-static char *current_game_path = NULL;
+char *g_current_game_path = NULL;
 static uint8_t last_sram[2048] = {0};
 
 struct retro_game_geometry g_geometry = {0};
@@ -603,14 +603,11 @@ static bool save_sram(const char *path)
     return true;
 }
 
-bool retrocore_load_state(unsigned slot)
+bool retrocore_load_state(const char *save_path)
 {
     size_t size = g_retro.retro_serialize_size();
     void *state = malloc(size);
 
-    char extension[] = {".state.0"};
-    extension[7] = '0' + slot;
-    char *save_path = string_replace_extension(current_game_path, extension);
     FILE *fp = fopen(save_path, "rb");
     if (!fp) goto fail;
     if (fread(state, 1, size, fp) != size) goto fail2;
@@ -618,7 +615,6 @@ bool retrocore_load_state(unsigned slot)
 
     bool result = g_retro.retro_unserialize(state, size);
     free(state);
-    free(save_path);
 
     if (result)
     {
@@ -632,34 +628,27 @@ bool retrocore_load_state(unsigned slot)
 fail2:
     fclose(fp);
 fail:
-    free(save_path);
     free(state);
     return false;
 }
 
-bool retrocore_save_state(unsigned slot)
+bool retrocore_save_state(const char *save_path)
 {
     size_t size = g_retro.retro_serialize_size();
     void *state = malloc(size);
     if (!g_retro.retro_serialize(state, size)) goto fail;
 
-    char extension[] = {".state.0"};
-    extension[7] = '0' + slot;
-    char *save_path = string_replace_extension(current_game_path, extension);
     FILE *fp = fopen(save_path, "wb");
-    if (!fp) goto fail2;
-    if (fwrite(state, 1, size, fp) != size) goto fail3;
+    if (!fp) goto fail;
+    if (fwrite(state, 1, size, fp) != size) goto fail2;
     fclose(fp);
 
     printf("Saved state of size %zu to %s\n", size, save_path);
-    free(save_path);
     free(state);
     return true;
 
-fail3:
-    fclose(fp);
 fail2:
-    free(save_path);
+    fclose(fp);
 fail:
     free(state);
     return false;
@@ -684,10 +673,10 @@ void retrocore_load_game(const char *game_path)
 
     // Load the game.
     core_load_game(game_path);
-    current_game_path = strdup(game_path);
+    g_current_game_path = strdup(game_path);
 
     // Load save data (SRAM) from disk.
-    char *save_path = string_replace_extension(current_game_path, ".sav");
+    char *save_path = string_replace_extension(g_current_game_path, ".sav");
     printf("save path=%s\n", save_path);
     if (load_sram(save_path))
         printf("Loaded SRAM from %s\n", save_path);
@@ -731,7 +720,7 @@ gpointer retrocore_run_game(gpointer data)
         if (memcmp(last_sram, sram, sizeof(last_sram)) != 0)
         {
             printf("SRAM updated!\n");
-            char *save_path = string_replace_extension(current_game_path, ".sav");
+            char *save_path = string_replace_extension(g_current_game_path, ".sav");
             if (save_sram(save_path))
                 printf("Saved SRAM to %s\n", save_path);
             else
@@ -748,8 +737,8 @@ gpointer retrocore_run_game(gpointer data)
 	audio_deinit();
 	video_deinit();
 
-    free(current_game_path);
-    current_game_path = NULL;
+    free(g_current_game_path);
+    g_current_game_path = NULL;
     frame_count = 0;
     memset(last_sram, 0, sizeof(last_sram));
 
