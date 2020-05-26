@@ -559,6 +559,16 @@ void setup_menu_item(const char *name, GCallback callback, gpointer cb_user_data
     g_signal_connect(obj, "can-activate-accel", G_CALLBACK(can_activate_accel), NULL);
 }
 
+void app_quit()
+{
+    close_game();
+    if (g_blank_cursor)
+    {
+        g_object_unref(g_blank_cursor);
+    }
+    gtk_main_quit();
+}
+
 int main(int argc, char **argv)
 {
     GObject *window;
@@ -579,7 +589,7 @@ int main(int argc, char **argv)
 
     // Connect signal handlers to the constructed widgets
     window = gtk_builder_get_object(builder, "mainWindow");
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(window, "destroy", G_CALLBACK(app_quit), NULL);
     g_signal_connect(window, "window-state-event", G_CALLBACK(on_window_state_change), NULL);
     g_signal_connect(window, "motion-notify-event", G_CALLBACK(on_mouse_pointer_move), NULL);
 
@@ -587,7 +597,7 @@ int main(int argc, char **argv)
     setup_menu_item("closeButton", G_CALLBACK(on_close_button_activate), builder);
     setup_menu_item("loadState", G_CALLBACK(on_load_state_activate), builder);
     setup_menu_item("saveStateAs", G_CALLBACK(on_save_state_as_activate), builder);
-    setup_menu_item("exitButton", G_CALLBACK(gtk_main_quit), builder);
+    setup_menu_item("exitButton", G_CALLBACK(app_quit), builder);
     setup_menu_item("pauseButton", G_CALLBACK(on_pause_button_activate), builder);
     setup_menu_item("resetButton", G_CALLBACK(on_reset_button_activate), builder);
     setup_menu_item("fullscreenButton", G_CALLBACK(on_fullscreen_button_activate), builder);
