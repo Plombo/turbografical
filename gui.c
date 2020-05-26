@@ -26,15 +26,23 @@
 #include <GL/glext.h>
 
 static GtkBuilder *builder = NULL;
+
 static GLuint shader_program = 0;
 static bool texture_inited = 0;
+
 static GThread *emu_thread = NULL;
 static char *rom_path = NULL;
+
 GMutex g_frame_lock = {0};
 GCond g_ready_cond = {0};
+
 int64_t last_frame_count = -1;
 static unsigned int state_slot = 0;
+
 static bool g_fullscreen = false;
+static gint64 g_last_mouse_movement = 0;
+static GdkCursor *g_blank_cursor = NULL;
+
 
 static gboolean render(GtkGLArea *area, GdkGLContext *context)
 {
@@ -212,6 +220,23 @@ static void on_realize_gl_area(GtkGLArea *area)
 static gboolean tick_cb(GtkWidget *gl_area_w, GdkFrameClock *frame_clock, gpointer user_data)
 {
     gtk_widget_queue_draw(gl_area_w);
+
+    if (g_fullscreen)
+    {
+        GdkWindow *window = gtk_widget_get_window(gl_area_w);
+        if (g_last_mouse_movement + 2500000 < g_get_monotonic_time())
+        {
+            g_blank_cursor = gdk_cursor_new_for_display(
+                    gdk_window_get_display(window),
+                    GDK_BLANK_CURSOR);
+            gdk_window_set_cursor(window, g_blank_cursor);
+        }
+        else
+        {
+            gdk_window_set_cursor(window, NULL);
+        }
+    }
+
     return G_SOURCE_CONTINUE;
 }
 
@@ -250,6 +275,7 @@ static void on_window_state_change(GtkWidget *widget, GdkEvent *ev, gpointer use
         {
             g_fullscreen = false;
             gtk_widget_set_visible(menu_bar, TRUE);
+            gdk_window_set_cursor(event->window, NULL);
         }
     }
 }
@@ -258,6 +284,7 @@ static void on_window_state_change(GtkWidget *widget, GdkEvent *ev, gpointer use
 static gboolean on_mouse_pointer_move(GtkWidget *widget, GdkEvent *ev, gpointer unused)
 {
     GdkEventMotion *event = (GdkEventMotion *) ev;
+    g_last_mouse_movement = g_get_monotonic_time();
     if (g_fullscreen)
     {
         // Show the menu bar in fullscreen only if the mouse pointer is in the top 10% of the screen.
