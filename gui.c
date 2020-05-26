@@ -222,7 +222,10 @@ static void on_realize_gl_area(GtkGLArea *area)
 // callback that makes the GL area redraw on every frame
 static gboolean tick_cb(GtkWidget *gl_area_w, GdkFrameClock *frame_clock, gpointer user_data)
 {
-    gtk_widget_queue_draw(gl_area_w);
+    if (emu_thread)
+    {
+        gtk_widget_queue_draw(gl_area_w);
+    }
 
     if (g_fullscreen)
     {
@@ -315,6 +318,10 @@ static void close_game()
     emu_thread = NULL;
     free(rom_path);
     rom_path = NULL;
+
+    // the GL area needs to redraw itself one last time, to clear everything
+    GtkWidget *gl_area = GTK_WIDGET(gtk_builder_get_object(builder, "glArea"));
+    gtk_widget_queue_draw(gl_area);
 }
 
 static void load_game(const char *path)
@@ -586,11 +593,9 @@ int main(int argc, char **argv)
     setup_menu_item("fullscreenButton", G_CALLBACK(on_fullscreen_button_activate), builder);
 
     // Create the GtkGlArea
-    glArea = gtk_gl_area_new();
-    box = gtk_builder_get_object(builder, "mainBox");
-    gtk_box_pack_end(GTK_BOX(box), glArea, TRUE, TRUE, 0);
-    g_signal_connect(glArea, "realize", G_CALLBACK(on_realize_gl_area), NULL);
-    g_signal_connect(glArea, "render", G_CALLBACK(render), NULL);
+    glArea = GTK_WIDGET(gtk_builder_get_object(builder, "glArea"));
+    g_signal_connect(G_OBJECT(glArea), "realize", G_CALLBACK(on_realize_gl_area), NULL);
+    g_signal_connect(G_OBJECT(glArea), "render", G_CALLBACK(render), NULL);
 
     // Make the GL area update at the monitor's refresh rate.
     gtk_widget_add_tick_callback(glArea, tick_cb, NULL, NULL);
