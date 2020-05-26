@@ -223,12 +223,16 @@ static gboolean tick_cb(GtkWidget *gl_area_w, GdkFrameClock *frame_clock, gpoint
 
     if (g_fullscreen)
     {
+        // Hide cursor in fullscreen if no mouse movement in the last 2.5 seconds
         GdkWindow *window = gtk_widget_get_window(gl_area_w);
         if (g_last_mouse_movement + 2500000 < g_get_monotonic_time())
         {
-            g_blank_cursor = gdk_cursor_new_for_display(
-                    gdk_window_get_display(window),
-                    GDK_BLANK_CURSOR);
+            if (!g_blank_cursor)
+            {
+                g_blank_cursor = gdk_cursor_new_for_display(
+                        gdk_window_get_display(window),
+                        GDK_BLANK_CURSOR);
+            }
             gdk_window_set_cursor(window, g_blank_cursor);
         }
         else
