@@ -35,8 +35,8 @@ void retrocore_pause(void);
 void retrocore_unpause(void);
 void retrocore_toggle_pause(void);
 
-bool retrocore_load_state(const char *path);
-bool retrocore_save_state(const char *path);
+void retrocore_load_state(const char *path);
+void retrocore_save_state(const char *path);
 
 void handle_key_event(unsigned keyval, bool pressed);
 

@@ -36,6 +36,9 @@ bool running = false;
 static bool paused = false;
 static Uint64 pause_time;
 
+static char *g_save_state_path = NULL;
+static char *g_load_state_path = NULL;
+
 static struct {
 	GLuint pitch;
 	GLint tex_w, tex_h;
@@ -603,7 +606,7 @@ static bool save_sram(const char *path)
     return true;
 }
 
-bool retrocore_load_state(const char *save_path)
+bool load_state_actual(const char *save_path)
 {
     size_t size = g_retro.retro_serialize_size();
     void *state = malloc(size);
@@ -632,7 +635,7 @@ fail:
     return false;
 }
 
-bool retrocore_save_state(const char *save_path)
+bool save_state_actual(const char *save_path)
 {
     size_t size = g_retro.retro_serialize_size();
     void *state = malloc(size);
@@ -652,6 +655,16 @@ fail2:
 fail:
     free(state);
     return false;
+}
+
+void retrocore_load_state(const char *path)
+{
+    g_load_state_path = strdup(path);
+}
+
+void retrocore_save_state(const char *path)
+{
+    g_save_state_path = strdup(path);
 }
 
 static void noop() {}
@@ -727,6 +740,20 @@ gpointer retrocore_run_game(gpointer data)
                 printf("Failed to save SRAM to %s\n", save_path);
             free(save_path);
             memcpy(last_sram, sram, sizeof(last_sram));
+        }
+
+        if (g_save_state_path)
+        {
+            save_state_actual(g_save_state_path);
+            free(g_save_state_path);
+            g_save_state_path = NULL;
+        }
+
+        if (g_load_state_path)
+        {
+            load_state_actual(g_load_state_path);
+            free(g_load_state_path);
+            g_load_state_path = NULL;
         }
 
 		++frame_count;
