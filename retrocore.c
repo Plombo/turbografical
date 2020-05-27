@@ -11,43 +11,21 @@
 #include <glib.h>
 #include <gdk/gdk.h>
 
-#define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-#include <GL/glext.h>
-
-static struct retro_frame_time_callback runloop_frame_time;
-static retro_usec_t runloop_frame_time_last = 0;
-static struct retro_audio_callback audio_callback;
-static int64_t frame_count = 0;
-double target_frame_time = 0.165;
-
-char *g_current_game_path = NULL;
-static uint8_t last_sram[2048] = {0};
-
-struct retro_game_geometry g_geometry = {0};
+// exported globals
 struct video_frame g_frames[2] = {{0}, {0}};
 int g_next_frame = 0;
+double target_frame_time = 0.165;
+char *g_current_game_path = NULL;
 
+// local globals
+static bool running = false;
+static int64_t frame_count = 0;
+static uint8_t last_sram[2048] = {0};
 static Uint64 start_time = 0;
-
-static float g_scale = 3;
-bool running = false;
-
-static bool paused = false;
 static Uint64 pause_time;
-
+static bool paused = false;
 static char *g_save_state_path = NULL;
 static char *g_load_state_path = NULL;
-
-static struct {
-	GLuint pitch;
-	GLint tex_w, tex_h;
-	GLuint clip_w, clip_h;
-
-	GLuint pixfmt;
-	GLuint pixtype;
-	GLuint bpp;
-} g_video  = {0};
 
 static struct {
     SDL_AudioDeviceID device;
@@ -112,7 +90,8 @@ static unsigned g_joy[RETRO_DEVICE_ID_JOYPAD_R3+1] = { 0 };
 #define load_retro_sym(S) load_sym(g_retro.S, S)
 
 
-static void die(const char *fmt, ...) {
+static void die(const char *fmt, ...)
+{
 	char buffer[4096];
 
 	va_list va;
@@ -183,66 +162,8 @@ void handle_key_event(unsigned keyval, bool pressed)
     }
 }
 
-
-static void resize_to_aspect(double ratio, int sw, int sh, int *dw, int *dh) {
-	*dw = sw;
-	*dh = sh;
-
-	if (ratio <= 0)
-		ratio = (double)sw / sh;
-
-	if ((float)sw / sh < 1)
-		*dw = *dh * ratio;
-	else
-		*dh = *dw / ratio;
-}
-
-
-static void video_configure(const struct retro_game_geometry *geom) {
-	int nwidth, nheight;
-
-	resize_to_aspect(geom->aspect_ratio, geom->base_width * 1, geom->base_height * 1, &nwidth, &nheight);
-
-	nwidth *= g_scale;
-	nheight *= g_scale;
-
-    g_video.pitch = geom->base_width * g_video.bpp;
-
-	g_video.tex_w = geom->max_width;
-	g_video.tex_h = geom->max_height;
-	g_video.clip_w = geom->base_width;
-	g_video.clip_h = geom->base_height;
-
-    g_geometry = *geom;
-}
-
-
-static bool video_set_pixel_format(unsigned format) {
-	switch (format) {
-	case RETRO_PIXEL_FORMAT_0RGB1555:
-		g_video.pixfmt = GL_UNSIGNED_SHORT_5_5_5_1;
-		g_video.pixtype = GL_BGRA;
-		g_video.bpp = sizeof(uint16_t);
-		break;
-	case RETRO_PIXEL_FORMAT_XRGB8888:
-		g_video.pixfmt = GL_UNSIGNED_INT_8_8_8_8_REV;
-		g_video.pixtype = GL_BGRA;
-		g_video.bpp = sizeof(uint32_t);
-		break;
-	case RETRO_PIXEL_FORMAT_RGB565:
-		g_video.pixfmt  = GL_UNSIGNED_SHORT_5_6_5;
-		g_video.pixtype = GL_RGB;
-		g_video.bpp = sizeof(uint16_t);
-		break;
-	default:
-		die("Unknown pixel type %u", format);
-	}
-
-	return true;
-}
-
-
-static void video_refresh(const void *data, unsigned width, unsigned height, unsigned pitch) {
+static void video_refresh(const void *data, unsigned width, unsigned height, size_t pitch)
+{
     g_mutex_lock(&g_frame_lock);
     // Check "running" here because if it's false, the GUI thread is waiting for this thread to
     // exit, so waiting on the condition would cause a deadlock.
@@ -255,22 +176,16 @@ static void video_refresh(const void *data, unsigned width, unsigned height, uns
     g_next_frame = !g_next_frame;
     struct video_frame *frame = &g_frames[g_next_frame];
 
-    if (g_video.clip_w != width || g_video.clip_h != height || frame->data == NULL)
+    if (frame->width != width || frame->height != height || frame->data == NULL)
     {
-		g_video.clip_h = height;
-		g_video.clip_w = width;
 		printf("resolution changed to %u*%u\n", width, height);
-
-		frame->data = realloc(frame->data, pitch * height);
+		frame->data = realloc(frame->data, width * height * 2);
 	}
 
     frame->frame_count = frame_count;
     frame->presentation_time = frame_count * target_frame_time;
     frame->width = width;
     frame->height = height;
-    frame->pitch = pitch;
-    frame->bottom = (float)g_video.clip_h / g_video.tex_h;
-    frame->right  = (float)g_video.clip_w / g_video.tex_w;
     if (data && data != RETRO_HW_FRAME_BUFFER_VALID)
     {
         const uint8_t *src = (const uint8_t*) data;
@@ -287,17 +202,17 @@ static void video_refresh(const void *data, unsigned width, unsigned height, uns
     g_mutex_unlock(&g_frame_lock);
 }
 
-static void video_deinit() {
-    if (g_frames[0].data)
-        free(g_frames[0].data);
-    if (g_frames[1].data)
-        free(g_frames[1].data);
+static void video_deinit()
+{
+    free(g_frames[0].data);
+    free(g_frames[1].data);
     memset(g_frames, 0, sizeof(g_frames));
     g_next_frame = 0;
 }
 
 
-static void audio_init(int frequency) {
+static void audio_init(int frequency)
+{
     SDL_AudioSpec desired;
     SDL_AudioSpec obtained;
 
@@ -315,20 +230,17 @@ static void audio_init(int frequency) {
 
     SDL_PauseAudioDevice(g_audio.device, 0);
     g_audio.sample_rate = frequency;
-
-    // Let the core know that the audio device has been initialized.
-    if (audio_callback.set_state) {
-        audio_callback.set_state(true);
-    }
 }
 
 
-static void audio_deinit() {
+static void audio_deinit()
+{
     SDL_CloseAudioDevice(g_audio.device);
     g_audio.samples_played = 0;
 }
 
-static size_t audio_write(const int16_t *buf, unsigned frames) {
+static size_t audio_write(const int16_t *buf, unsigned frames)
+{
     // If there's been a break in audio playback, and the audio is more than 100 ms
     // behind where it should be, change the clock to re-sync video to audio.
     if (SDL_GetQueuedAudioSize(g_audio.device) == 0)
@@ -344,17 +256,15 @@ static size_t audio_write(const int16_t *buf, unsigned frames) {
         //else
         //    printf("queue empty but not resyncing video; difference is only %.1f ms\n", difference * 1000);
     }
-    //else if ((retrocore_time() - (double)g_audio.samples_played / g_audio.sample_rate) > 0.05)
-    //    printf("queue not empty but audio desynced by %.1f ms\n", retrocore_time() - (double)g_audio.samples_played / g_audio.sample_rate);
 
-    //printf("queued audio: %f ms total\n", SDL_GetQueuedAudioSize(g_audio.device) / (4.0*44100) * 1000.0);
     int ret = SDL_QueueAudio(g_audio.device, buf, sizeof(*buf) * frames * 2);
     g_audio.samples_played += frames;
     return frames;
 }
 
 
-static void core_log(enum retro_log_level level, const char *fmt, ...) {
+static void core_log(enum retro_log_level level, const char *fmt, ...)
+{
 	char buffer[4096] = {0};
 	static const char * levelstr[] = { "dbg", "inf", "wrn", "err" };
 	va_list va;
@@ -373,7 +283,8 @@ static void core_log(enum retro_log_level level, const char *fmt, ...) {
 		exit(EXIT_FAILURE);
 }
 
-static bool core_environment(unsigned cmd, void *data) {
+static bool core_environment(unsigned cmd, void *data)
+{
 	bool *bval;
 
 	switch (cmd) {
@@ -389,22 +300,11 @@ static bool core_environment(unsigned cmd, void *data) {
 	case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT: {
 		const enum retro_pixel_format *fmt = (enum retro_pixel_format *)data;
 
-		if (*fmt > RETRO_PIXEL_FORMAT_RGB565)
+		if (*fmt != RETRO_PIXEL_FORMAT_RGB565)
 			return false;
 
-		return video_set_pixel_format(*fmt);
+		return true;
 	}
-    case RETRO_ENVIRONMENT_SET_FRAME_TIME_CALLBACK: {
-        const struct retro_frame_time_callback *frame_time =
-            (const struct retro_frame_time_callback*)data;
-        runloop_frame_time = *frame_time;
-        break;
-    }
-    case RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK: {
-        struct retro_audio_callback *audio_cb = (struct retro_audio_callback*)data;
-        audio_callback = *audio_cb;
-        return true;
-    }
     case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
     case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
         *(const char **)data = ".";
@@ -418,16 +318,13 @@ static bool core_environment(unsigned cmd, void *data) {
 }
 
 
-static void core_video_refresh(const void *data, unsigned width, unsigned height, size_t pitch) {
-    video_refresh(data, width, height, pitch);
+static void core_input_poll(void)
+{
 }
 
 
-static void core_input_poll(void) {
-}
-
-
-static int16_t core_input_state(unsigned port, unsigned device, unsigned index, unsigned id) {
+static int16_t core_input_state(unsigned port, unsigned device, unsigned index, unsigned id)
+{
 	if (port || index || device != RETRO_DEVICE_JOYPAD)
 		return 0;
 
@@ -435,18 +332,21 @@ static int16_t core_input_state(unsigned port, unsigned device, unsigned index, 
 }
 
 
-static void core_audio_sample(int16_t left, int16_t right) {
+static void core_audio_sample(int16_t left, int16_t right)
+{
 	int16_t buf[2] = {left, right};
 	audio_write(buf, 1);
 }
 
 
-static size_t core_audio_sample_batch(const int16_t *data, size_t frames) {
+static size_t core_audio_sample_batch(const int16_t *data, size_t frames)
+{
 	return audio_write(data, frames);
 }
 
 
-static void core_load(const char *sofile) {
+static void core_load(const char *sofile)
+{
 	void (*set_environment)(retro_environment_t) = NULL;
 	void (*set_video_refresh)(retro_video_refresh_t) = NULL;
 	void (*set_input_poll)(retro_input_poll_t) = NULL;
@@ -483,7 +383,7 @@ static void core_load(const char *sofile) {
 	load_sym(set_audio_sample_batch, retro_set_audio_sample_batch);
 
 	set_environment(core_environment);
-	set_video_refresh(core_video_refresh);
+	set_video_refresh(video_refresh);
 	set_input_poll(core_input_poll);
 	set_input_state(core_input_state);
 	set_audio_sample(core_audio_sample);
@@ -493,7 +393,8 @@ static void core_load(const char *sofile) {
 }
 
 
-static void core_load_game(const char *filename) {
+static void core_load_game(const char *filename)
+{
 	struct retro_system_av_info av = {0};
 	struct retro_system_info system = {0};
 	struct retro_game_info info = { filename, 0 };
@@ -510,46 +411,14 @@ static void core_load_game(const char *filename) {
 
 	g_retro.retro_get_system_info(&system);
 
-	if (!system.need_fullpath) {
-        info.data = SDL_malloc(info.size);
-
-        if (!info.data)
-            die("Failed to allocate memory for the content");
-
-        if (!SDL_RWread(file, (void*)info.data, info.size, 1))
-            die("Failed to read file data: %s", SDL_GetError());
-	}
-
 	if (!g_retro.retro_load_game(&info))
 		die("The core failed to load the content.");
 
 	g_retro.retro_get_system_av_info(&av);
-
-	video_configure(&av.geometry);
 	audio_init(av.timing.sample_rate);
 	target_frame_time = 1.0 / av.timing.fps;
 
-    if (info.data)
-        SDL_free((void*)info.data);
-
     SDL_RWclose(file);
-
-    // Now that we have the system info, set the window title.
-    // TODO
-    //char window_title[255];
-    //snprintf(window_title, sizeof(window_title), "sdlarch %s %s", system.library_name, system.library_version);
-    //SDL_SetWindowTitle(g_win, window_title);
-}
-
-/**
- * cpu_features_get_time_usec:
- *
- * Gets time in microseconds.
- *
- * Returns: time in microseconds.
- **/
-retro_time_t cpu_features_get_time_usec(void) {
-    return (retro_time_t)SDL_GetTicks();
 }
 
 static void core_unload()
@@ -667,8 +536,6 @@ void retrocore_save_state(const char *path)
     g_save_state_path = strdup(path);
 }
 
-static void noop() {}
-
 void retrocore_init(const char *core_path)
 {
     if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
@@ -708,24 +575,8 @@ gpointer retrocore_run_game(gpointer data)
     running = true;
     paused = false;
 
-    while (running) {
-        // Update the game loop timer.
-        if (runloop_frame_time.callback) {
-            retro_time_t current = cpu_features_get_time_usec();
-            retro_time_t delta = current - runloop_frame_time_last;
-
-            if (!runloop_frame_time_last)
-                delta = runloop_frame_time.reference;
-            runloop_frame_time_last = current;
-            runloop_frame_time.callback(delta * 1000);
-        }
-
-        // Ask the core to emit the audio.
-        if (audio_callback.callback) {
-            audio_callback.callback();
-        }
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    while (running)
+    {
 		g_retro.retro_run();
 
         // SRAM updated?

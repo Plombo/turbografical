@@ -8,9 +8,6 @@
 struct video_frame {
     unsigned width;
     unsigned height;
-    unsigned pitch;
-    float bottom;
-    float right;
     void *data;
     int64_t frame_count;
     double presentation_time;
@@ -26,7 +23,6 @@ extern char *g_current_game_path;
 extern struct video_frame g_frames[];
 extern int g_next_frame;
 extern double target_frame_time;
-extern struct retro_game_geometry g_geometry;
 
 // returns time from core startup in seconds
 double retrocore_time(void);
