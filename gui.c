@@ -21,6 +21,7 @@
 #include <gtk/gtk.h>
 #include "util.h"
 #include "retrocore.h"
+#include "config.h"
 
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
@@ -578,6 +579,8 @@ int main(int argc, char **argv)
     GError *error = NULL;
 
     gtk_init(&argc, &argv);
+
+    set_default_config();
 
     // Construct a GtkBuilder instance and load our UI description
     builder = gtk_builder_new();

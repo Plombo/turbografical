@@ -7,6 +7,7 @@
 #include "libretro.h"
 #include "retrocore.h"
 #include "util.h"
+#include "config.h"
 
 #include <glib.h>
 #include <gdk/gdk.h>
@@ -63,22 +64,6 @@ static struct {
 struct keymap {
 	unsigned k;
 	unsigned rk;
-};
-
-static struct keymap g_binds[] = {
-    { GDK_KEY_x, RETRO_DEVICE_ID_JOYPAD_A },
-    { GDK_KEY_z, RETRO_DEVICE_ID_JOYPAD_B },
-    { GDK_KEY_a, RETRO_DEVICE_ID_JOYPAD_Y },
-    { GDK_KEY_s, RETRO_DEVICE_ID_JOYPAD_X },
-    { GDK_KEY_Up, RETRO_DEVICE_ID_JOYPAD_UP },
-    { GDK_KEY_Down, RETRO_DEVICE_ID_JOYPAD_DOWN },
-    { GDK_KEY_Left, RETRO_DEVICE_ID_JOYPAD_LEFT },
-    { GDK_KEY_Right, RETRO_DEVICE_ID_JOYPAD_RIGHT },
-    { GDK_KEY_Return, RETRO_DEVICE_ID_JOYPAD_START },
-    { GDK_KEY_BackSpace, RETRO_DEVICE_ID_JOYPAD_SELECT },
-    { GDK_KEY_q, RETRO_DEVICE_ID_JOYPAD_L },
-    { GDK_KEY_w, RETRO_DEVICE_ID_JOYPAD_R },
-    { 0, 0 }
 };
 
 static unsigned g_joy[RETRO_DEVICE_ID_JOYPAD_R3+1] = { 0 };
@@ -155,10 +140,10 @@ void handle_key_event(unsigned keyval, bool pressed)
     }
 
     int i;
-    for (i = 0; g_binds[i].k || g_binds[i].rk; ++i)
+    for (i = 0; g_config.g_binds[i]; ++i)
     {
-        if (g_binds[i].k == keyval)
-            g_joy[g_binds[i].rk] = pressed;
+        if (g_config.g_binds[i] == keyval)
+            g_joy[i] = pressed;
     }
 }
 
